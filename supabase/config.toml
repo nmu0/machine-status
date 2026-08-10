@@ -1,0 +1,4 @@
+project_id = "machine-status"
+
+[db]
+major_version = 15
