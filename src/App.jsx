@@ -271,17 +271,27 @@ export default function App() {
 
             <div style={styles.formRow}>
               <label style={styles.label}>
-                Machine ID
-                <input
+                Machine
+                <select
                     style={styles.input}
                     value={machineId}
                     onChange={(e) => {
                       setMachineId(e.target.value)
                       setNearestMatch(null)
                     }}
-                    placeholder="e.g. Q00173, or use Find nearest machine above"
                     required
-                />
+                >
+                  <option value="" disabled>
+                    {machinesLoading ? 'Loading machines…' : 'Select a machine'}
+                  </option>
+                  {[...machines]
+                      .sort((a, b) => a.name.localeCompare(b.name))
+                      .map((m) => (
+                          <option key={m.machine_id} value={m.machine_id}>
+                            {m.name} — {m.address} ({m.machine_id})
+                          </option>
+                      ))}
+                </select>
               </label>
               <label style={styles.label}>
                 Status
@@ -301,7 +311,7 @@ export default function App() {
             <label style={styles.label}>
               Note (optional)
               <textarea
-                  style={{ ...styles.input, minHeight: 60 }}
+                  style={{...styles.input, minHeight: 60}}
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
                   placeholder="Any details — e.g. 'screen is dark', 'card slot jammed'"
@@ -315,7 +325,7 @@ export default function App() {
           <section style={styles.card}>
             <div style={styles.listHeader}>
               <h2 style={styles.h2}>Latest reported status</h2>
-              <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{display: 'flex', gap: 8}}>
                 <button
                     type="button"
                     onClick={() => setView('map')}
