@@ -258,7 +258,7 @@ export default function App() {
                   style={styles.locateNearestBtn}
                   disabled={locatingNearest}
               >
-                {locatingNearest ? 'Locating…' : '📍 Find nearest machine'}
+                {locatingNearest ? 'Locating…' : ' Find nearest machine'}
               </button>
               {nearestMatch && (
                   <p style={styles.nearestText}>
