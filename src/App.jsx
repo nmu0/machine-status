@@ -9,6 +9,18 @@ const STATUS_OPTIONS = [
   { value: 'empty', label: 'Empty (needs restock)', color: '#f08c00' },
 ]
 
+const STARTERS = [
+  { name: 'Sprigatito', src: 'https://img.pokemondb.net/sprites/scarlet-violet/normal/sprigatito.png', href: 'https://pokemondb.net/pokedex/sprigatito' },
+  { name: 'Chikorita', src: 'https://img.pokemondb.net/sprites/scarlet-violet/normal/chikorita.png', href: 'https://pokemondb.net/pokedex/chikorita' },
+  { name: 'Snivy', src: 'https://img.pokemondb.net/sprites/scarlet-violet/normal/snivy.png', href: 'https://pokemondb.net/pokedex/snivy' },
+  { name: 'Fennekin', src: 'https://img.pokemondb.net/sprites/scarlet-violet/normal/fennekin.png', href: 'https://pokemondb.net/pokedex/fennekin' },
+  { name: 'Cyndaquil', src: 'https://img.pokemondb.net/sprites/scarlet-violet/normal/cyndaquil.png', href: 'https://pokemondb.net/pokedex/cyndaquil' },
+  { name: 'Litten', src: 'https://img.pokemondb.net/sprites/scarlet-violet/normal/litten.png', href: 'https://pokemondb.net/pokedex/litten' },
+  { name: 'Mudkip', src: 'https://img.pokemondb.net/sprites/scarlet-violet/normal/mudkip.png', href: 'https://pokemondb.net/pokedex/mudkip' },
+  { name: 'Oshawott', src: 'https://img.pokemondb.net/sprites/scarlet-violet/normal/oshawott.png', href: 'https://pokemondb.net/pokedex/oshawott' },
+  { name: 'Piplup', src: 'https://img.pokemondb.net/sprites/scarlet-violet/normal/piplup.png', href: 'https://pokemondb.net/pokedex/piplup' },
+]
+
 function statusMeta(status) {
   return STATUS_OPTIONS.find((s) => s.value === status) ?? {
     label: status,
@@ -25,6 +37,18 @@ function timeAgo(isoString) {
   if (hrs < 24) return `${hrs}h ago`
   const days = Math.floor(hrs / 24)
   return `${days}d ago`
+}
+
+// Haversine distance in miles between two lat/lng points.
+function distanceMiles(lat1, lng1, lat2, lng2) {
+  const toRad = (d) => (d * Math.PI) / 180
+  const R = 3958.8
+  const dLat = toRad(lat2 - lat1)
+  const dLng = toRad(lng2 - lng1)
+  const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 }
 
 // A generic pokéball-style icon, built from CSS shapes rather than
@@ -85,6 +109,10 @@ export default function App() {
   const [submitting, setSubmitting] = useState(false)
   const [search, setSearch] = useState('')
 
+  const [locatingNearest, setLocatingNearest] = useState(false)
+  const [nearestMatch, setNearestMatch] = useState(null)
+  const [nearestError, setNearestError] = useState(null)
+
   async function fetchReports() {
     setReportsLoading(true)
     const { data, error } = await supabase
@@ -138,6 +166,7 @@ export default function App() {
     setMachineId('')
     setNote('')
     setStatus('broken')
+    setNearestMatch(null)
     fetchReports()
   }
 
@@ -158,9 +187,50 @@ export default function App() {
 
   function handleReportFromMap(id) {
     setMachineId(id)
+    setNearestMatch(null)
     document
         .getElementById('report-form')
         ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
+  function findNearestMachine() {
+    if (!navigator.geolocation) {
+      setNearestError('Geolocation is not supported in this browser.')
+      return
+    }
+    if (machines.length === 0) {
+      setNearestError('No machine locations loaded yet — try again in a moment.')
+      return
+    }
+
+    setLocatingNearest(true)
+    setNearestError(null)
+
+    navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const { latitude, longitude } = pos.coords
+          let closest = null
+          let closestDist = Infinity
+
+          for (const m of machines) {
+            const d = distanceMiles(latitude, longitude, m.lat, m.lng)
+            if (d < closestDist) {
+              closestDist = d
+              closest = m
+            }
+          }
+
+          setLocatingNearest(false)
+          if (closest) {
+            setMachineId(closest.machine_id)
+            setNearestMatch({ ...closest, distance: closestDist })
+          }
+        },
+        () => {
+          setLocatingNearest(false)
+          setNearestError('Could not get your location — check permissions.')
+        }
+    )
   }
 
   return (
@@ -168,151 +238,185 @@ export default function App() {
         <div style={styles.topBar} />
         <div style={styles.page}>
 
-        <header style={styles.header}>
-          <div style={styles.titleRow}>
-            <PokeballIcon size={34} />
-            <h1 style={styles.h1}>Machine Status</h1>
-          </div>
-          <p style={styles.subtitle}>
-            Is that machine actually working? Report it below and save the
-            next person a wasted trip.
-          </p>
-        </header>
+          <header style={styles.header}>
+            <div style={styles.titleRow}>
+              <PokeballIcon size={34} />
+              <h1 style={styles.h1}>Machine Status</h1>
+            </div>
+            <p style={styles.subtitle}>
+              Is the vending machine actually working? Report it below and let us know!
+            </p>
+          </header>
 
-        <form id="report-form" onSubmit={handleSubmit} style={styles.card}>
-          <h2 style={styles.h2}>Report a machine</h2>
-          <div style={styles.formRow}>
+          <form id="report-form" onSubmit={handleSubmit} style={styles.card}>
+            <h2 style={styles.h2}>Report a machine</h2>
+
+            <div style={{ marginBottom: 12 }}>
+              <button
+                  type="button"
+                  onClick={findNearestMachine}
+                  style={styles.locateNearestBtn}
+                  disabled={locatingNearest}
+              >
+                {locatingNearest ? 'Locating…' : '📍 Find nearest machine'}
+              </button>
+              {nearestMatch && (
+                  <p style={styles.nearestText}>
+                    Matched: <strong>{nearestMatch.name}</strong> — {nearestMatch.address}
+                    {' '}(~{nearestMatch.distance.toFixed(1)} mi away)
+                  </p>
+              )}
+              {nearestError && <p style={{ ...styles.nearestText, color: '#e03131' }}>{nearestError}</p>}
+            </div>
+
+            <div style={styles.formRow}>
+              <label style={styles.label}>
+                Machine ID
+                <input
+                    style={styles.input}
+                    value={machineId}
+                    onChange={(e) => {
+                      setMachineId(e.target.value)
+                      setNearestMatch(null)
+                    }}
+                    placeholder="e.g. Q00173, or use Find nearest machine above"
+                    required
+                />
+              </label>
+              <label style={styles.label}>
+                Status
+                <select
+                    style={styles.input}
+                    value={status}
+                    onChange={(e) => setStatus(e.target.value)}
+                >
+                  {STATUS_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                  ))}
+                </select>
+              </label>
+            </div>
             <label style={styles.label}>
-              Machine ID
-              <input
-                  style={styles.input}
-                  value={machineId}
-                  onChange={(e) => setMachineId(e.target.value)}
-                  placeholder="e.g. Q00173"
-                  required
+              Note (optional)
+              <textarea
+                  style={{ ...styles.input, minHeight: 60 }}
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  placeholder="Any details — e.g. 'screen is dark', 'card slot jammed'"
               />
             </label>
-            <label style={styles.label}>
-              Status
-              <select
-                  style={styles.input}
-                  value={status}
-                  onChange={(e) => setStatus(e.target.value)}
-              >
-                {STATUS_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                ))}
-              </select>
-            </label>
-          </div>
-          <label style={styles.label}>
-            Note (optional)
-            <textarea
-                style={{ ...styles.input, minHeight: 60 }}
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                placeholder="Any details — e.g. 'screen is dark', 'card slot jammed'"
-            />
-          </label>
-          <button style={styles.button} type="submit" disabled={submitting}>
-            {submitting ? 'Submitting…' : 'Submit report'}
-          </button>
-        </form>
+            <button style={styles.button} type="submit" disabled={submitting}>
+              {submitting ? 'Submitting…' : 'Submit report'}
+            </button>
+          </form>
 
-        <section style={styles.card}>
-          <div style={styles.listHeader}>
-            <h2 style={styles.h2}>Latest reported status</h2>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button
-                  type="button"
-                  onClick={() => setView('map')}
-                  style={view === 'map' ? styles.toggleActive : styles.toggle}
-              >
-                Map
-              </button>
-              <button
-                  type="button"
-                  onClick={() => setView('list')}
-                  style={view === 'list' ? styles.toggleActive : styles.toggle}
-              >
-                List
-              </button>
+          <section style={styles.card}>
+            <div style={styles.listHeader}>
+              <h2 style={styles.h2}>Latest reported status</h2>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                    type="button"
+                    onClick={() => setView('map')}
+                    style={view === 'map' ? styles.toggleActive : styles.toggle}
+                >
+                  Map
+                </button>
+                <button
+                    type="button"
+                    onClick={() => setView('list')}
+                    style={view === 'list' ? styles.toggleActive : styles.toggle}
+                >
+                  List
+                </button>
+              </div>
             </div>
-          </div>
 
-          {error && <p style={styles.error}>Error: {error}</p>}
+            {error && <p style={styles.error}>Error: {error}</p>}
 
-          {view === 'map' ? (
-              machinesLoading ? (
-                  <p style={styles.subtitle}>Loading machines…</p>
-              ) : machines.length === 0 ? (
-                  <p style={styles.subtitle}>
-                    No machine locations yet — add rows to the{' '}
-                    <code>machines</code> table to plot them here.
-                  </p>
-              ) : (
-                  <MapView
-                      machines={machines}
-                      latestByMachine={latestByMachine}
-                      onReport={handleReportFromMap}
-                  />
-              )
-          ) : (
-              <>
-                <input
-                    style={{ ...styles.input, maxWidth: 220, marginBottom: 12 }}
-                    placeholder="Search machine ID…"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                />
-                {reportsLoading ? (
-                    <p style={styles.subtitle}>Loading reports…</p>
-                ) : filtered.length === 0 ? (
-                    <p style={styles.subtitle}>No reports yet — be the first.</p>
+            {view === 'map' ? (
+                machinesLoading ? (
+                    <p style={styles.subtitle}>Loading machines…</p>
+                ) : machines.length === 0 ? (
+                    <p style={styles.subtitle}>
+                      No machine locations yet — add rows to the{' '}
+                      <code>machines</code> table to plot them here.
+                    </p>
                 ) : (
-                    <ul style={styles.list}>
-                      {filtered.map((r) => {
-                        const meta = statusMeta(r.status)
-                        return (
-                            <li key={r.id} style={styles.listItem}>
-                              <span style={{ ...styles.dot, background: meta.color }} />
-                              <div style={{ flex: 1 }}>
-                                <div style={styles.machineRow}>
-                                  <strong>{r.machine_id}</strong>
-                                  <span style={{ color: meta.color, fontWeight: 700 }}>
+                    <MapView
+                        machines={machines}
+                        latestByMachine={latestByMachine}
+                        onReport={handleReportFromMap}
+                    />
+                )
+            ) : (
+                <>
+                  <input
+                      style={{ ...styles.input, maxWidth: 220, marginBottom: 12 }}
+                      placeholder="Search machine ID…"
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                  />
+                  {reportsLoading ? (
+                      <p style={styles.subtitle}>Loading reports…</p>
+                  ) : filtered.length === 0 ? (
+                      <p style={styles.subtitle}>No reports yet — be the first.</p>
+                  ) : (
+                      <ul style={styles.list}>
+                        {filtered.map((r) => {
+                          const meta = statusMeta(r.status)
+                          return (
+                              <li key={r.id} style={styles.listItem}>
+                                <span style={{ ...styles.dot, background: meta.color }} />
+                                <div style={{ flex: 1 }}>
+                                  <div style={styles.machineRow}>
+                                    <strong>{r.machine_id}</strong>
+                                    <span style={{ color: meta.color, fontWeight: 700 }}>
                             {meta.label}
                           </span>
+                                  </div>
+                                  {r.note && <div style={styles.note}>{r.note}</div>}
+                                  <div style={styles.timestamp}>{timeAgo(r.created_at)}</div>
                                 </div>
-                                {r.note && <div style={styles.note}>{r.note}</div>}
-                                <div style={styles.timestamp}>{timeAgo(r.created_at)}</div>
-                              </div>
-                            </li>
-                        )
-                      })}
-                    </ul>
-                )}
-              </>
-          )}
-        </section>
+                              </li>
+                          )
+                        })}
+                      </ul>
+                  )}
+                </>
+            )}
+          </section>
 
-        <section style={styles.bioCard}>
-          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-            <PokeballIcon size={22} />
-            <div>
-              <h2 style={{ ...styles.h2, marginBottom: 6 }}>Why this exists</h2>
-              <p style={styles.bioText}>
-                The card machine at the Mountlake Terrace Safeway (Q00173) has
-                been broken for over a month, and the only way to find that out
-                was to drive over and check. So I built this instead — report
-                a broken or empty machine here, and everyone else looking
-                skips the wasted trip.
-              </p>
+          <section style={styles.bioCard}>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+              <PokeballIcon size={22} />
+              <div>
+                <h2 style={{ ...styles.h2, marginBottom: 6 }}>Why this exists</h2>
+                <p style={styles.bioText}>
+                  The card machine at the Mountlake Terrace Safeway (Q00173) has
+                  been broken for over a month, and the only way to know is to venture out there yourself
+                  and check. So, I built this instead. Report a broken or empty machine here! Happy pokemon hunting &lt;3
+                </p>
+              </div>
             </div>
+          </section>
+
+          <div style={styles.starterRow}>
+            {STARTERS.map((p) => (
+
+                key={p.name}
+              href={p.href}
+              target="_blank"
+              rel="noreferrer"
+              style={styles.starterLink}
+              >
+              <img src={p.src} alt={p.name} style={styles.starterImg} />
+              </a>
+              ))}
           </div>
-        </section>
-      </div>
+
+        </div>
       </div>
   )
 }
@@ -363,6 +467,22 @@ const styles = {
     margin: 0,
     fontStyle: 'italic',
   },
+  starterRow: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 14,
+    marginTop: 24,
+  },
+  starterLink: {
+    display: 'inline-flex',
+    transition: 'transform 0.15s ease',
+  },
+  starterImg: {
+    width: 48,
+    height: 48,
+    imageRendering: 'pixelated',
+  },
   h2: {
     fontFamily: "'Fredoka', 'Nunito', sans-serif",
     fontSize: 19,
@@ -396,6 +516,22 @@ const styles = {
     fontWeight: 700,
     cursor: 'pointer',
     boxShadow: '0 2px 0 #1a1a1a',
+  },
+  locateNearestBtn: {
+    background: '#3b4cca',
+    color: '#fff',
+    border: '2px solid #1a1a1a',
+    borderRadius: 10,
+    padding: '8px 14px',
+    fontSize: 13,
+    fontWeight: 700,
+    cursor: 'pointer',
+  },
+  nearestText: {
+    fontSize: 13,
+    color: '#333',
+    marginTop: 8,
+    marginBottom: 0,
   },
   listHeader: {
     display: 'flex',
