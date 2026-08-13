@@ -368,7 +368,7 @@ export default function App() {
                   style={{ ...styles.input, minHeight: 60 }}
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
-                  placeholder="Any details — e.g. 'screen is dark', 'card slot jammed'"
+                  placeholder="Any details - dark screen, under maintenance, etc"
               />
             </label>
             <button style={styles.button} type="submit" disabled={submitting}>
