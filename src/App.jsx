@@ -469,16 +469,10 @@ export default function App() {
 
           <div style={styles.starterRow}>
             {STARTERS.map((p) => (
-
-                key={p.name}
-              href={p.href}
-              target="_blank"
-              rel="noreferrer"
-              style={styles.starterLink}
-              >
-              <img src={p.src} alt={p.name} style={styles.starterImg} />
-              </a>
-              ))}
+                <a key={p.name} href={p.href} target="_blank" rel="noreferrer" style={styles.starterLink}>
+                  <img src={p.src} alt={p.name} style={styles.starterImg} />
+                </a>
+            ))}
           </div>
 
         </div>
