@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from './supabaseClient'
+import MapView from './MapView'
+import 'leaflet/dist/leaflet.css'
 
 const STATUS_OPTIONS = [
   { value: 'working', label: 'Working', color: '#2f9e44' },
@@ -27,8 +29,10 @@ function timeAgo(isoString) {
 
 export default function App() {
   const [reports, setReports] = useState([])
+  const [machines, setMachines] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [view, setView] = useState('map') // 'map' | 'list'
 
   const [machineId, setMachineId] = useState('')
   const [status, setStatus] = useState('broken')
@@ -39,10 +43,10 @@ export default function App() {
   async function fetchReports() {
     setLoading(true)
     const { data, error } = await supabase
-      .from('machine_reports')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(500)
+        .from('machine_reports')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(500)
 
     if (error) {
       setError(error.message)
@@ -53,8 +57,18 @@ export default function App() {
     setLoading(false)
   }
 
+  async function fetchMachines() {
+    const { data, error } = await supabase.from('machines').select('*')
+    if (error) {
+      setError(error.message)
+    } else {
+      setMachines(data)
+    }
+  }
+
   useEffect(() => {
     fetchReports()
+    fetchMachines()
   }, [])
 
   async function handleSubmit(e) {
@@ -87,105 +101,145 @@ export default function App() {
       if (!map.has(r.machine_id)) map.set(r.machine_id, r)
     }
     return Array.from(map.values()).sort(
-      (a, b) => new Date(b.created_at) - new Date(a.created_at)
+        (a, b) => new Date(b.created_at) - new Date(a.created_at)
     )
   }, [reports])
 
   const filtered = latestByMachine.filter((r) =>
-    r.machine_id.toLowerCase().includes(search.toLowerCase())
+      r.machine_id.toLowerCase().includes(search.toLowerCase())
   )
 
-  return (
-    <div style={styles.page}>
-      <header style={styles.header}>
-        <h1 style={styles.h1}>Machine Status</h1>
-        <p style={styles.subtitle}>
-          Crowdsourced status reports for Pokémon card vending machines.
-          Report a broken or empty machine below — everyone benefits.
-        </p>
-      </header>
+  function handleReportFromMap(id) {
+    setMachineId(id)
+    document
+        .getElementById('report-form')
+        ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
 
-      <form onSubmit={handleSubmit} style={styles.card}>
-        <h2 style={styles.h2}>Report a machine</h2>
-        <div style={styles.formRow}>
+  return (
+      <div style={styles.page}>
+        <header style={styles.header}>
+          <h1 style={styles.h1}>Machine Status</h1>
+          <p style={styles.subtitle}>
+            Crowdsourced status reports for Pokémon card vending machines.
+            Report a broken or empty machine below — everyone benefits.
+          </p>
+        </header>
+
+        <form id="report-form" onSubmit={handleSubmit} style={styles.card}>
+          <h2 style={styles.h2}>Report a machine</h2>
+          <div style={styles.formRow}>
+            <label style={styles.label}>
+              Machine ID
+              <input
+                  style={styles.input}
+                  value={machineId}
+                  onChange={(e) => setMachineId(e.target.value)}
+                  placeholder="e.g. Q00173"
+                  required
+              />
+            </label>
+            <label style={styles.label}>
+              Status
+              <select
+                  style={styles.input}
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value)}
+              >
+                {STATUS_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                ))}
+              </select>
+            </label>
+          </div>
           <label style={styles.label}>
-            Machine ID
-            <input
-              style={styles.input}
-              value={machineId}
-              onChange={(e) => setMachineId(e.target.value)}
-              placeholder="e.g. Q00173"
-              required
+            Note (optional)
+            <textarea
+                style={{ ...styles.input, minHeight: 60 }}
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder="Any details — e.g. 'screen is dark', 'card slot jammed'"
             />
           </label>
-          <label style={styles.label}>
-            Status
-            <select
-              style={styles.input}
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-            >
-              {STATUS_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-        <label style={styles.label}>
-          Note (optional)
-          <textarea
-            style={{ ...styles.input, minHeight: 60 }}
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder="Any details — e.g. 'screen is dark', 'card slot jammed'"
-          />
-        </label>
-        <button style={styles.button} type="submit" disabled={submitting}>
-          {submitting ? 'Submitting…' : 'Submit report'}
-        </button>
-      </form>
+          <button style={styles.button} type="submit" disabled={submitting}>
+            {submitting ? 'Submitting…' : 'Submit report'}
+          </button>
+        </form>
 
-      <section style={styles.card}>
-        <div style={styles.listHeader}>
-          <h2 style={styles.h2}>Latest reported status</h2>
-          <input
-            style={{ ...styles.input, maxWidth: 220 }}
-            placeholder="Search machine ID…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
+        <section style={styles.card}>
+          <div style={styles.listHeader}>
+            <h2 style={styles.h2}>Latest reported status</h2>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                  type="button"
+                  onClick={() => setView('map')}
+                  style={view === 'map' ? styles.toggleActive : styles.toggle}
+              >
+                Map
+              </button>
+              <button
+                  type="button"
+                  onClick={() => setView('list')}
+                  style={view === 'list' ? styles.toggleActive : styles.toggle}
+              >
+                List
+              </button>
+            </div>
+          </div>
 
-        {error && <p style={styles.error}>Error: {error}</p>}
-        {loading && <p>Loading…</p>}
-        {!loading && filtered.length === 0 && (
-          <p style={styles.subtitle}>No reports yet — be the first.</p>
-        )}
+          {error && <p style={styles.error}>Error: {error}</p>}
+          {loading && <p>Loading…</p>}
 
-        <ul style={styles.list}>
-          {filtered.map((r) => {
-            const meta = statusMeta(r.status)
-            return (
-              <li key={r.id} style={styles.listItem}>
-                <span style={{ ...styles.dot, background: meta.color }} />
-                <div style={{ flex: 1 }}>
-                  <div style={styles.machineRow}>
-                    <strong>{r.machine_id}</strong>
-                    <span style={{ color: meta.color, fontWeight: 600 }}>
-                      {meta.label}
-                    </span>
-                  </div>
-                  {r.note && <div style={styles.note}>{r.note}</div>}
-                  <div style={styles.timestamp}>{timeAgo(r.created_at)}</div>
-                </div>
-              </li>
-            )
-          })}
-        </ul>
-      </section>
-    </div>
+          {view === 'map' ? (
+              machines.length === 0 && !loading ? (
+                  <p style={styles.subtitle}>
+                    No machine locations yet — add rows to the{' '}
+                    <code>machines</code> table to plot them here.
+                  </p>
+              ) : (
+                  <MapView
+                      machines={machines}
+                      latestByMachine={latestByMachine}
+                      onReport={handleReportFromMap}
+                  />
+              )
+          ) : (
+              <>
+                <input
+                    style={{ ...styles.input, maxWidth: 220, marginBottom: 12 }}
+                    placeholder="Search machine ID…"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                />
+                {!loading && filtered.length === 0 && (
+                    <p style={styles.subtitle}>No reports yet — be the first.</p>
+                )}
+                <ul style={styles.list}>
+                  {filtered.map((r) => {
+                    const meta = statusMeta(r.status)
+                    return (
+                        <li key={r.id} style={styles.listItem}>
+                          <span style={{ ...styles.dot, background: meta.color }} />
+                          <div style={{ flex: 1 }}>
+                            <div style={styles.machineRow}>
+                              <strong>{r.machine_id}</strong>
+                              <span style={{ color: meta.color, fontWeight: 600 }}>
+                          {meta.label}
+                        </span>
+                            </div>
+                            {r.note && <div style={styles.note}>{r.note}</div>}
+                            <div style={styles.timestamp}>{timeAgo(r.created_at)}</div>
+                          </div>
+                        </li>
+                    )
+                  })}
+                </ul>
+              </>
+          )}
+        </section>
+      </div>
   )
 }
 
@@ -195,7 +249,7 @@ const styles = {
     margin: '0 auto',
     padding: '32px 20px 80px',
     fontFamily:
-      "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+        "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
     color: '#1a1a1a',
   },
   header: { marginBottom: 24 },
@@ -242,6 +296,26 @@ const styles = {
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 12,
+  },
+  toggle: {
+    background: '#f1f3f5',
+    color: '#495057',
+    border: '1px solid #dee2e6',
+    borderRadius: 8,
+    padding: '6px 12px',
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: 'pointer',
+  },
+  toggleActive: {
+    background: '#1a1a1a',
+    color: '#fff',
+    border: '1px solid #1a1a1a',
+    borderRadius: 8,
+    padding: '6px 12px',
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: 'pointer',
   },
   list: { listStyle: 'none', margin: 0, padding: 0 },
   listItem: {
