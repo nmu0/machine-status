@@ -2,7 +2,7 @@
   box-sizing: border-box;
 }
 
-body {
+html, body {
   margin: 0;
-  background: #f7f7f8;
+  background: #fef9e7;
 }

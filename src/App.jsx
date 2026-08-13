@@ -164,8 +164,9 @@ export default function App() {
   }
 
   return (
-      <div style={styles.page}>
+      <div>
         <div style={styles.topBar} />
+        <div style={styles.page}>
 
         <header style={styles.header}>
           <div style={styles.titleRow}>
@@ -312,6 +313,7 @@ export default function App() {
           </div>
         </section>
       </div>
+      </div>
   )
 }
 
@@ -319,17 +321,15 @@ const styles = {
   page: {
     maxWidth: 640,
     margin: '0 auto',
-    padding: '0 20px 80px',
+    padding: '28px 20px 80px',
     fontFamily: "'Nunito', -apple-system, BlinkMacSystemFont, sans-serif",
     color: '#1a1a1a',
-    background: '#fef9e7',
-    minHeight: '100vh',
   },
   topBar: {
     height: 10,
+    width: '100%',
     background:
         'linear-gradient(90deg, #ee1515 0%, #ee1515 33%, #3b4cca 33%, #3b4cca 66%, #ffde00 66%)',
-    margin: '0 -20px 28px',
   },
   header: { marginBottom: 24 },
   titleRow: { display: 'flex', alignItems: 'center', gap: 12 },
