@@ -27,10 +27,55 @@ function timeAgo(isoString) {
   return `${days}d ago`
 }
 
+// A generic pokéball-style icon, built from CSS shapes rather than
+// any official artwork — just the red-top/white-bottom/black-band
+// silhouette people associate with the games.
+function PokeballIcon({ size = 28 }) {
+  return (
+      <div
+          style={{
+            width: size,
+            height: size,
+            borderRadius: '50%',
+            background: 'linear-gradient(#ee1515 0 50%, #fff 50% 100%)',
+            border: '2.5px solid #1a1a1a',
+            position: 'relative',
+            flexShrink: 0,
+          }}
+      >
+        <div
+            style={{
+              position: 'absolute',
+              left: 0,
+              right: 0,
+              top: '50%',
+              height: 3,
+              background: '#1a1a1a',
+              transform: 'translateY(-1.5px)',
+            }}
+        />
+        <div
+            style={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              width: size * 0.36,
+              height: size * 0.36,
+              borderRadius: '50%',
+              background: '#fff',
+              border: '2.5px solid #1a1a1a',
+              transform: 'translate(-50%, -50%)',
+            }}
+        />
+      </div>
+  )
+}
+
 export default function App() {
   const [reports, setReports] = useState([])
   const [machines, setMachines] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [reportsLoading, setReportsLoading] = useState(true)
+  const [machinesLoading, setMachinesLoading] = useState(true)
   const [error, setError] = useState(null)
   const [view, setView] = useState('map') // 'map' | 'list'
 
@@ -41,7 +86,7 @@ export default function App() {
   const [search, setSearch] = useState('')
 
   async function fetchReports() {
-    setLoading(true)
+    setReportsLoading(true)
     const { data, error } = await supabase
         .from('machine_reports')
         .select('*')
@@ -54,16 +99,18 @@ export default function App() {
       setError(null)
       setReports(data)
     }
-    setLoading(false)
+    setReportsLoading(false)
   }
 
   async function fetchMachines() {
+    setMachinesLoading(true)
     const { data, error } = await supabase.from('machines').select('*')
     if (error) {
       setError(error.message)
     } else {
       setMachines(data)
     }
+    setMachinesLoading(false)
   }
 
   useEffect(() => {
@@ -118,11 +165,16 @@ export default function App() {
 
   return (
       <div style={styles.page}>
+        <div style={styles.topBar} />
+
         <header style={styles.header}>
-          <h1 style={styles.h1}>Machine Status</h1>
+          <div style={styles.titleRow}>
+            <PokeballIcon size={34} />
+            <h1 style={styles.h1}>Machine Status</h1>
+          </div>
           <p style={styles.subtitle}>
-            Crowdsourced status reports for Pokémon card vending machines.
-            Report a broken or empty machine below — everyone benefits.
+            Is that machine actually working? Report it below and save the
+            next person a wasted trip.
           </p>
         </header>
 
@@ -190,10 +242,11 @@ export default function App() {
           </div>
 
           {error && <p style={styles.error}>Error: {error}</p>}
-          {loading && <p>Loading…</p>}
 
           {view === 'map' ? (
-              machines.length === 0 && !loading ? (
+              machinesLoading ? (
+                  <p style={styles.subtitle}>Loading machines…</p>
+              ) : machines.length === 0 ? (
                   <p style={styles.subtitle}>
                     No machine locations yet — add rows to the{' '}
                     <code>machines</code> table to plot them here.
@@ -213,31 +266,50 @@ export default function App() {
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                 />
-                {!loading && filtered.length === 0 && (
+                {reportsLoading ? (
+                    <p style={styles.subtitle}>Loading reports…</p>
+                ) : filtered.length === 0 ? (
                     <p style={styles.subtitle}>No reports yet — be the first.</p>
+                ) : (
+                    <ul style={styles.list}>
+                      {filtered.map((r) => {
+                        const meta = statusMeta(r.status)
+                        return (
+                            <li key={r.id} style={styles.listItem}>
+                              <span style={{ ...styles.dot, background: meta.color }} />
+                              <div style={{ flex: 1 }}>
+                                <div style={styles.machineRow}>
+                                  <strong>{r.machine_id}</strong>
+                                  <span style={{ color: meta.color, fontWeight: 700 }}>
+                            {meta.label}
+                          </span>
+                                </div>
+                                {r.note && <div style={styles.note}>{r.note}</div>}
+                                <div style={styles.timestamp}>{timeAgo(r.created_at)}</div>
+                              </div>
+                            </li>
+                        )
+                      })}
+                    </ul>
                 )}
-                <ul style={styles.list}>
-                  {filtered.map((r) => {
-                    const meta = statusMeta(r.status)
-                    return (
-                        <li key={r.id} style={styles.listItem}>
-                          <span style={{ ...styles.dot, background: meta.color }} />
-                          <div style={{ flex: 1 }}>
-                            <div style={styles.machineRow}>
-                              <strong>{r.machine_id}</strong>
-                              <span style={{ color: meta.color, fontWeight: 600 }}>
-                          {meta.label}
-                        </span>
-                            </div>
-                            {r.note && <div style={styles.note}>{r.note}</div>}
-                            <div style={styles.timestamp}>{timeAgo(r.created_at)}</div>
-                          </div>
-                        </li>
-                    )
-                  })}
-                </ul>
               </>
           )}
+        </section>
+
+        <section style={styles.bioCard}>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+            <PokeballIcon size={22} />
+            <div>
+              <h2 style={{ ...styles.h2, marginBottom: 6 }}>Why this exists</h2>
+              <p style={styles.bioText}>
+                The card machine at the Mountlake Terrace Safeway (Q00173) has
+                been broken for over a month, and the only way to find that out
+                was to drive over and check. So I built this instead — report
+                a broken or empty machine here, and everyone else looking
+                skips the wasted trip.
+              </p>
+            </div>
+          </div>
         </section>
       </div>
   )
@@ -247,74 +319,110 @@ const styles = {
   page: {
     maxWidth: 640,
     margin: '0 auto',
-    padding: '32px 20px 80px',
-    fontFamily:
-        "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    padding: '0 20px 80px',
+    fontFamily: "'Nunito', -apple-system, BlinkMacSystemFont, sans-serif",
     color: '#1a1a1a',
+    background: '#fef9e7',
+    minHeight: '100vh',
+  },
+  topBar: {
+    height: 10,
+    background:
+        'linear-gradient(90deg, #ee1515 0%, #ee1515 33%, #3b4cca 33%, #3b4cca 66%, #ffde00 66%)',
+    margin: '0 -20px 28px',
   },
   header: { marginBottom: 24 },
-  h1: { fontSize: 28, margin: 0 },
-  subtitle: { color: '#666', marginTop: 6, lineHeight: 1.4 },
+  titleRow: { display: 'flex', alignItems: 'center', gap: 12 },
+  h1: {
+    fontFamily: "'Fredoka', 'Nunito', sans-serif",
+    fontSize: 30,
+    margin: 0,
+    color: '#1a1a1a',
+    letterSpacing: 0.2,
+  },
+  subtitle: { color: '#5b5b5b', marginTop: 8, lineHeight: 1.5, fontSize: 15 },
   card: {
     background: '#fff',
-    border: '1px solid #e5e5e5',
-    borderRadius: 12,
+    border: '3px solid #1a1a1a',
+    borderRadius: 18,
     padding: 20,
     marginBottom: 20,
-    boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+    boxShadow: '0 3px 0 #1a1a1a',
   },
-  h2: { fontSize: 18, margin: '0 0 12px' },
+  bioCard: {
+    background: '#fff8dc',
+    border: '2px dashed #ee1515',
+    borderRadius: 18,
+    padding: 18,
+    marginTop: 8,
+  },
+  bioText: {
+    color: '#444',
+    lineHeight: 1.6,
+    fontSize: 14,
+    margin: 0,
+    fontStyle: 'italic',
+  },
+  h2: {
+    fontFamily: "'Fredoka', 'Nunito', sans-serif",
+    fontSize: 19,
+    margin: '0 0 12px',
+  },
   formRow: { display: 'flex', gap: 12, marginBottom: 12 },
   label: {
     display: 'flex',
     flexDirection: 'column',
     gap: 4,
     fontSize: 13,
+    fontWeight: 700,
     color: '#444',
     flex: 1,
     marginBottom: 12,
   },
   input: {
-    padding: '8px 10px',
-    borderRadius: 8,
-    border: '1px solid #d0d0d0',
+    padding: '9px 11px',
+    borderRadius: 10,
+    border: '2px solid #d8d8d8',
     fontSize: 14,
     fontFamily: 'inherit',
   },
   button: {
-    background: '#e03131',
+    background: '#ee1515',
     color: '#fff',
-    border: 'none',
-    borderRadius: 8,
-    padding: '10px 16px',
+    border: '2px solid #1a1a1a',
+    borderRadius: 10,
+    padding: '10px 18px',
     fontSize: 14,
-    fontWeight: 600,
+    fontWeight: 700,
     cursor: 'pointer',
+    boxShadow: '0 2px 0 #1a1a1a',
   },
   listHeader: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 12,
+    flexWrap: 'wrap',
+    gap: 8,
   },
   toggle: {
     background: '#f1f3f5',
     color: '#495057',
-    border: '1px solid #dee2e6',
-    borderRadius: 8,
-    padding: '6px 12px',
+    border: '2px solid #dee2e6',
+    borderRadius: 10,
+    padding: '6px 14px',
     fontSize: 13,
-    fontWeight: 600,
+    fontWeight: 700,
     cursor: 'pointer',
   },
   toggleActive: {
-    background: '#1a1a1a',
+    background: '#3b4cca',
     color: '#fff',
-    border: '1px solid #1a1a1a',
-    borderRadius: 8,
-    padding: '6px 12px',
+    border: '2px solid #1a1a1a',
+    borderRadius: 10,
+    padding: '6px 14px',
     fontSize: 13,
-    fontWeight: 600,
+    fontWeight: 700,
     cursor: 'pointer',
   },
   list: { listStyle: 'none', margin: 0, padding: 0 },
@@ -335,5 +443,5 @@ const styles = {
   machineRow: { display: 'flex', justifyContent: 'space-between', gap: 8 },
   note: { color: '#555', fontSize: 13, marginTop: 2 },
   timestamp: { color: '#999', fontSize: 12, marginTop: 2 },
-  error: { color: '#e03131' },
+  error: { color: '#e03131', fontWeight: 700 },
 }
