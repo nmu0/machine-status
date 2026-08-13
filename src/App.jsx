@@ -396,7 +396,8 @@ export default function App() {
                 <p style={styles.bioText}>
                   The card machine at the Mountlake Terrace Safeway (Q00173) has
                   been broken for over a month, and the only way to know is to venture out there yourself
-                  and check. So, I built this instead. Report a broken or empty machine here! Happy pokemon hunting &lt;3
+                  and check. So, I built this instead. Report a broken or empty machine here! Happy
+                  pokemon hunting &lt;3
                 </p>
               </div>
             </div>
@@ -404,16 +405,10 @@ export default function App() {
 
           <div style={styles.starterRow}>
             {STARTERS.map((p) => (
-
-                key={p.name}
-              href={p.href}
-              target="_blank"
-              rel="noreferrer"
-              style={styles.starterLink}
-              >
-              <img src={p.src} alt={p.name} style={styles.starterImg} />
-              </a>
-              ))}
+                <a key={p.name} href={p.href} target="_blank" rel="noreferrer" style={styles.starterLink}>
+                  <img src={p.src} alt={p.name} style={styles.starterImg} />
+                </a>
+            ))}
           </div>
 
         </div>
