@@ -95,6 +95,67 @@ function PokeballIcon({ size = 28 }) {
   )
 }
 
+function MachinePicker({ machines, machinesLoading, value, onChange, userLocation }) {
+  const [search, setSearch] = useState('')
+
+  const withDistance = machines.map((m) => ({
+    ...m,
+    distance: userLocation
+        ? distanceMiles(userLocation[0], userLocation[1], m.lat, m.lng)
+        : null,
+  }))
+
+  const q = search.toLowerCase()
+  const filtered = withDistance.filter(
+      (m) =>
+          !q ||
+          m.name.toLowerCase().includes(q) ||
+          m.address.toLowerCase().includes(q) ||
+          m.machine_id.toLowerCase().includes(q)
+  )
+
+  const sorted = [...filtered].sort((a, b) =>
+      userLocation ? a.distance - b.distance : a.name.localeCompare(b.name)
+  )
+
+  return (
+      <div>
+        <input
+            style={{ ...styles.input, marginBottom: 8 }}
+            placeholder="Search by store name or address…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+        />
+        <div style={styles.machineList}>
+          {machinesLoading ? (
+              <p style={styles.subtitle}>Loading machines…</p>
+          ) : sorted.length === 0 ? (
+              <p style={styles.subtitle}>No machines match your search.</p>
+          ) : (
+              sorted.map((m) => (
+                  <div
+                      key={m.machine_id}
+                      onClick={() => onChange(m.machine_id)}
+                      style={
+                        m.machine_id === value
+                            ? styles.machineCardSelected
+                            : styles.machineCard
+                      }
+                  >
+                    <div style={{ fontWeight: 700 }}>{m.name}</div>
+                    <div style={{ fontSize: 13, color: '#666' }}>{m.address}</div>
+                    <div style={styles.machineCardMeta}>
+                      <span>ID: {m.machine_id}</span>
+                      {m.distance != null && <span>{m.distance.toFixed(1)} mi away</span>}
+                    </div>
+                  </div>
+              ))
+          )}
+        </div>
+      </div>
+  )
+}
+
 export default function App() {
   const [reports, setReports] = useState([])
   const [machines, setMachines] = useState([])
@@ -112,6 +173,7 @@ export default function App() {
   const [locatingNearest, setLocatingNearest] = useState(false)
   const [nearestMatch, setNearestMatch] = useState(null)
   const [nearestError, setNearestError] = useState(null)
+  const [userLocation, setUserLocation] = useState(null)
 
   async function fetchReports() {
     setReportsLoading(true)
@@ -209,6 +271,7 @@ export default function App() {
     navigator.geolocation.getCurrentPosition(
         (pos) => {
           const { latitude, longitude } = pos.coords
+          setUserLocation([latitude, longitude])
           let closest = null
           let closestDist = Infinity
 
@@ -258,7 +321,7 @@ export default function App() {
                   style={styles.locateNearestBtn}
                   disabled={locatingNearest}
               >
-                {locatingNearest ? 'Locating…' : ' Find nearest machine'}
+                {locatingNearest ? 'Locating…' : '📍 Find nearest machine'}
               </button>
               {nearestMatch && (
                   <p style={styles.nearestText}>
@@ -269,30 +332,21 @@ export default function App() {
               {nearestError && <p style={{ ...styles.nearestText, color: '#e03131' }}>{nearestError}</p>}
             </div>
 
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ ...styles.label, marginBottom: 6 }}>Machine</div>
+              <MachinePicker
+                  machines={machines}
+                  machinesLoading={machinesLoading}
+                  value={machineId}
+                  userLocation={userLocation}
+                  onChange={(id) => {
+                    setMachineId(id)
+                    setNearestMatch(null)
+                  }}
+              />
+            </div>
+
             <div style={styles.formRow}>
-              <label style={styles.label}>
-                Machine
-                <select
-                    style={styles.input}
-                    value={machineId}
-                    onChange={(e) => {
-                      setMachineId(e.target.value)
-                      setNearestMatch(null)
-                    }}
-                    required
-                >
-                  <option value="" disabled>
-                    {machinesLoading ? 'Loading machines…' : 'Select a machine'}
-                  </option>
-                  {[...machines]
-                      .sort((a, b) => a.name.localeCompare(b.name))
-                      .map((m) => (
-                          <option key={m.machine_id} value={m.machine_id}>
-                            {m.name} — {m.address} ({m.machine_id})
-                          </option>
-                      ))}
-                </select>
-              </label>
               <label style={styles.label}>
                 Status
                 <select
@@ -311,7 +365,7 @@ export default function App() {
             <label style={styles.label}>
               Note (optional)
               <textarea
-                  style={{...styles.input, minHeight: 60}}
+                  style={{ ...styles.input, minHeight: 60 }}
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
                   placeholder="Any details — e.g. 'screen is dark', 'card slot jammed'"
@@ -325,7 +379,7 @@ export default function App() {
           <section style={styles.card}>
             <div style={styles.listHeader}>
               <h2 style={styles.h2}>Latest reported status</h2>
-              <div style={{display: 'flex', gap: 8}}>
+              <div style={{ display: 'flex', gap: 8 }}>
                 <button
                     type="button"
                     onClick={() => setView('map')}
@@ -415,10 +469,16 @@ export default function App() {
 
           <div style={styles.starterRow}>
             {STARTERS.map((p) => (
-                <a key={p.name} href={p.href} target="_blank" rel="noreferrer" style={styles.starterLink}>
-                  <img src={p.src} alt={p.name} style={styles.starterImg} />
-                </a>
-            ))}
+
+                key={p.name}
+              href={p.href}
+              target="_blank"
+              rel="noreferrer"
+              style={styles.starterLink}
+              >
+              <img src={p.src} alt={p.name} style={styles.starterImg} />
+              </a>
+              ))}
           </div>
 
         </div>
@@ -531,6 +591,38 @@ const styles = {
     fontSize: 13,
     fontWeight: 700,
     cursor: 'pointer',
+  },
+  machineList: {
+    maxHeight: 280,
+    overflowY: 'auto',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 8,
+    border: '2px solid #e5e5e5',
+    borderRadius: 12,
+    padding: 8,
+  },
+  machineCard: {
+    border: '2px solid #e5e5e5',
+    borderRadius: 10,
+    padding: '10px 12px',
+    cursor: 'pointer',
+    background: '#fff',
+  },
+  machineCardSelected: {
+    border: '2px solid #f6b800',
+    background: '#fffbea',
+    borderRadius: 10,
+    padding: '10px 12px',
+    cursor: 'pointer',
+    boxShadow: '0 0 0 2px #fff3c4',
+  },
+  machineCardMeta: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    fontSize: 12,
+    color: '#999',
+    marginTop: 4,
   },
   nearestText: {
     fontSize: 13,
